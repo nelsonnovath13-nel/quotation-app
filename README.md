@@ -1,74 +1,55 @@
-# Smart Quotation & Job Management — Core Slice
+# Smart Quotation & Job Management
 
-This is a **working vertical slice** of the full spec, not the complete
-system. It implements one product formula (Aluminium Sliding Window) end to
-end, correctly, with the architecture the full spec needs — so the rest can
-be added without restructuring.
+A real mobile-first quotation system for Tanzanian aluminium, PVC, glass and fabrication workshops.
 
-**Important:** this was written in a sandboxed environment with no network
-access, so it has not been run with `npm install` / `npm run dev` here. Read
-through it before relying on it, and expect to fix the odd typo on first run
-— that said, the code is complete and internally consistent.
+## What this MVP actually does
 
-## What's built and working end to end
+- Persistent PostgreSQL data model (production target: Supabase/PostgreSQL).
+- Customer and project records.
+- One project can contain **many categories and many products**.
+- Each product can contain many measurement lines.
+- Core products: aluminium sliding/casement windows, aluminium doors, sliding doors, shop fronts, partitions, PVC windows/doors, shower doors and glass railings.
+- Server-side pricing formulas and material-rate history.
+- Quotations freeze the exact prices used when they are generated.
+- Grouped quotation review by category and product.
+- Mobile-friendly measurement entry with numeric keyboards.
+- PDF quotation generation from stored quotation data.
+- WhatsApp share, phone call and quotation status workflow.
+- Follow-up data model ready for the next workflow slice.
 
-- Company (single demo tenant), Customer, Project, Measurement entry
-- Server-side pricing engine (`src/lib/pricing.ts`) — never trust client math
-- Quotation generation that **snapshots** the exact rates and cost breakdown
-  used, so a later rate change never alters an issued quotation
-  (`QuotationPriceSnapshot` in `prisma/schema.prisma`)
-- A polished multi-page quotation PDF (`@react-pdf/renderer`) with header,
-  branding, items table, totals, terms, page numbers, footer
-- Mobile-first UI: bottom nav, large touch targets, numeric keyboards for
-  measurements, empty states, human-readable errors
-- Basic accessibility: semantic HTML, labeled fields, focus rings, no
-  color-only status, `prefers-reduced-motion` respected
-- Seed script with a demo company, materials, rates, customer, project
+## Data model
 
-## What's intentionally NOT built yet (extension points)
+`Company → Customer → Project → MeasurementItem[] → Quotation → QuotationItem[] + QuotationPriceSnapshot`
 
-These were in the spec but are out of scope for a first working slice —
-each has a clear place to slot into the existing architecture:
+A quotation is generated from all measurement items in a project, so a single quotation can contain, for example:
 
-- **Auth / multi-tenant login** — `src/lib/current-company.ts` currently
-  just grabs the first company in the DB. Swap its body for a real session
-  lookup (NextAuth, Clerk, etc.) and every page keeps working unchanged.
-- **Admin UI for products, materials, rates, pricing rules** — the tables
-  exist (`Product`, `Material`, `MaterialRate`) and are seeded via script;
-  there's no UI to edit them yet. Add `/admin/materials` etc.
-- **More product formulas** (PVC, steel gates, casement windows, custom
-  fields) — add entries to the `FORMULAS` registry in `src/lib/pricing.ts`.
-  The `MeasurementItem.spec` JSON field already supports per-product extra
-  fields (frame, lock, automation, etc.).
-- **Company onboarding flow, logo upload, quotation template settings**
-- **Follow-ups dashboard** — the `FollowUp` model exists; no UI yet.
-- **Discount / tax entry, role-based pricing visibility for employees**
-- **Postgres in production** — schema currently targets SQLite for local
-  simplicity (`prisma/schema.prisma` datasource). Change the provider to
-  `postgresql` and set `DATABASE_URL` before deploying.
+- Aluminium → Sliding Windows → W01, W02
+- Aluminium → Doors → D01
+- PVC → Windows → P01, P02
+- Shower / Glass → Shower Door → S01
 
-## Running it locally
+## Production setup
+
+This repository targets PostgreSQL. Do not deploy with SQLite for production because serverless deployments need persistent shared storage.
+
+1. Create a PostgreSQL database (Supabase is recommended).
+2. Set `DATABASE_URL` in Vercel.
+3. Run:
 
 ```bash
 npm install
-cp .env.example .env
-npm run db:push     # creates the SQLite database from the schema
-npm run db:seed     # demo company, customer, project, measurements
-npm run dev
+npx prisma generate
+npx prisma db push
+npm run db:seed
+npm run build
 ```
 
-Then open http://localhost:3000 — you'll land on the dashboard for the
-seeded demo company. Go to **Customers → Grace Mushi → project → Add
-Measurement → Calculate Price & Generate Quotation → Download Quotation
-PDF** to see the whole flow, including the PDF.
+4. Deploy the `mvp/real-quotation` branch or merge it into `main`.
 
-## Why the pricing/snapshot design works the way it does
+## Important pricing rule
 
-`generateQuotation` (in `src/app/actions.ts`) recalculates from the
-project's measurements against the **current** material rates, then writes
-that exact result into `QuotationPriceSnapshot` alongside the rates used.
-The quotation's line items and totals are stored directly on `Quotation` /
-`QuotationItem` too — so even if you later change a material's rate, drop a
-material, or edit the pricing formula, every quotation already issued keeps
-showing the numbers it was generated with. Only new quotations pick up the
-new rate.
+Prices are calculated on the server from the current material-rate table. A generated quotation stores a `QuotationPriceSnapshot`, so changing rates later does not change an old quotation.
+
+## Current branch
+
+The production MVP work is on `mvp/real-quotation`.
